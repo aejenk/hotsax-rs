@@ -1,8 +1,13 @@
 [package]
 name = "dt_analysis"
+description = "A crate meant to assist with data analysis."
 version = "0.0.1"
-authors = ["Calmynt <mctech26@gmail.com>"]
+authors = ["Andrea Jenkins <mctech26@gmail.com>"]
+license = "MPL-2.0"
+keywords = ["data analysis", "time series", "anomalies"]
 edition = "2018"
+categories = ["algorithms"]
+maintenance = { status = "actively-developed" }
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
