@@ -1,6 +1,6 @@
 [package]
-name = "anomaly"
-version = "0.1.0"
+name = "dt_analysis"
+version = "0.0.1"
 authors = ["Calmynt <mctech26@gmail.com>"]
 edition = "2018"
 
