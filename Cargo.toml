@@ -9,13 +9,12 @@ edition = "2018"
 categories = ["algorithms"]
 maintenance = { status = "actively-developed" }
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 num = "0.2.1"
 lazy_static = "1.4.0"
 rand = "0.7.3"
 
+# Used to validate the discord discovery
 [dev-dependencies]
 csv = "1.1.3"
 plotly = "0.4.0"
