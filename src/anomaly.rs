@@ -1,74 +1,119 @@
 use num::Float;
-use super::dist::gaussian;
 use std::ops::AddAssign;
 use super::trie::AugmentedTrie;
 use std::collections::{HashMap, HashSet};
-use crate::util::znorm;
+use super::util::{znorm, gaussian};
 use rand::seq::SliceRandom;
 
-/// Helps with using the HOT SAX algorithm, by assuming certain defaults.
-///
-/// Namely:
-/// - sax_word_length = 3
-/// - alpha = 3
-pub struct KeoghBuilder<'a, N: Float> {
+/// Provides easy access to the HOT SAX and brute force algorithms, by using the builder pattern.
+/// The only necessary algorithmic parameter is the size of the discord itself. The rest have
+/// default values, namely:
+/// - `sax_word_length` = 3
+/// - `alpha` = 3
+/// - `use_brute_force` = false
+pub struct Keogh<'a, N: Float> {
     data: &'a Vec<N>,
     discord_size: usize,
     sax_word_length: usize,
     alpha: usize,
+    use_brute_force: bool,
 }
 
-impl<'a, N: Float> KeoghBuilder<'a, N> {
+impl<'a, N: Float> Keogh<'a, N> {
+
+    /// Sets up the data and the discord size to be used.
     pub fn with(data: &'a Vec<N>, discord_size: usize) -> Self {
         Self {
             data,
             discord_size,
             sax_word_length: 3,
             alpha: 3,
+            use_brute_force: false,
         }
     }
 
+    /// Sets a flag to use the brute force algorithm instead of the HOT SAX one.
+    pub fn use_brute_force(&mut self) -> &mut Self {
+        self.use_brute_force = true;
+        self
+    }
+
+    /// Sets the length of the SAX words to use.
     pub fn sax_word_length(&mut self, n: usize) -> &mut Self {
         self.sax_word_length = n;
         self
     }
 
+    /// Sets the alphabet size to be used. The only valid values should be in the range 3..=7.
+    ///
+    /// ## Panics
+    /// When `n` is set to an invalid value.
     pub fn alpha(&mut self, n: usize) -> &mut Self {
+        if (n<3) | (n>7) {
+            panic!("Invalid setting for alphabet size ({}). Only values in 3-7 are supported.", n);
+        }
+
         self.alpha = n;
         self
     }
 
+    /// Finds the largest discord. If one couldn't be found, this function returns a `None` instead.
     pub fn find_largest_discord(&self) -> Option<(f64, usize)> {
-        Keogh::get_top_discord(
-            self.data,
-            self.discord_size,
-            self.sax_word_length,
-            self.alpha
-        )
+        if self.use_brute_force {
+            KeoghInternal::brute_force_best(
+                self.data,
+                self.discord_size
+            )
+        }
+        else {
+            KeoghInternal::get_top_discord(
+                self.data,
+                self.discord_size,
+                self.sax_word_length,
+                self.alpha
+            )
+        }
     }
 
+    /// Finds the top `n` largest discords. The vector returned can have *less* than `n` elements
+    /// if less than `n` discords could be found.
     pub fn find_n_largest_discords(&self, discord_amnt: usize) -> Vec<(f64, usize)> {
-        Keogh::get_top_n_discords(
-            self.data,
-            self.discord_size,
-            self.sax_word_length,
-            self.alpha,
-            discord_amnt
-        )
+        if self.use_brute_force {
+            KeoghInternal::brute_force_top_n(
+                self.data,
+                self.discord_size,
+                discord_amnt
+            )
+        }
+        else {
+            KeoghInternal::get_top_n_discords(
+                self.data,
+                self.discord_size,
+                self.sax_word_length,
+                self.alpha,
+                discord_amnt
+            )
+        }
     }
 }
 
-pub struct Keogh {}
+/// Separates the internal logic of the algorithm from the public API.
+struct KeoghInternal {}
 
-impl Keogh {
+impl KeoghInternal {
     /// Brute force algorithm for finding discords. Made private due to substandard performance.
     ///
     /// Incredibly accurate, but slow to execute. Always takes n^2 time.
-    pub fn brute_force<N>(data: &Vec<N>, n: usize) -> (f64, usize) where N: Float {
+    fn brute_force_internal<N>(
+        data: &Vec<N>,
+        n: usize,
+        skip_over: &[usize]
+    ) -> (f64, usize) where N: Float {
         let mut best_dist = 0.0;
         let mut best_loc = 0;
 
         for i in 0..data.len()-n+1 {
+            if skip_over.contains(&i) { continue }
             let mut neigh_dist = std::f64::INFINITY;
             for j in 0..data.len()-n+1 {
                 if (i as isize - j as isize).abs() >= n as isize {
@@ -84,6 +129,40 @@ impl Keogh {
         }
 
         (best_dist, best_loc)
+    }
+
+    pub fn brute_force_top_n<N>(
+        data: &Vec<N>,
+        discord_size: usize,
+        discord_amnt: usize
+    ) -> Vec<(f64, usize)> where N: Float {
+        let mut discords = Vec::new();
+        let mut skip_over = Vec::new();
+
+        loop {
+            let discord = KeoghInternal::brute_force_internal(
+                data,
+                discord_size,
+                &[]
+            );
+
+            if discord.0 == 0.0 {
+                break discords
+            }
+
+            discords.push(discord);
+
+            if discords.len() >= discord_amnt {
+                break discords
+            }
+
+            skip_over.extend(discord.1-discord_size..discord.1+discord_size);
+        }
+    }
+
+    #[inline]
+    pub fn brute_force_best<N>(data: &Vec<N>, discord_size: usize) -> Option<(f64, usize)> where N: Float {
+        KeoghInternal::brute_force_top_n(data, discord_size, 1).pop()
     }
 
     fn attach_freq_sax_words(words: &Vec<String>) -> Vec<(&String, usize)> {
@@ -136,7 +215,7 @@ impl Keogh {
         // The former is useful to iterate over the data in an ordered way.
         // The latter is useful for the magic inner loop.
         // `word_table`
-        let word_table = Keogh::attach_freq_sax_words(&words)
+        let word_table = KeoghInternal::attach_freq_sax_words(&words)
             .into_iter()
             .enumerate()
             .collect::<Vec<(usize, (&String, usize))>>();
@@ -157,7 +236,7 @@ impl Keogh {
         let mut skip_over = Vec::new();
 
         loop {
-            let discord = Keogh::hot_sax_internal(
+            let discord = KeoghInternal::hot_sax_internal(
                 &word_table,
                 &trie,
                 discord_size,
@@ -200,7 +279,7 @@ impl Keogh {
         sax_word_length: usize,
         alpha: usize
     ) -> Option<(f64, usize)> where N: Float {
-        Keogh::get_top_n_discords(data, discord_size, sax_word_length, alpha,  1).pop()
+        KeoghInternal::get_top_n_discords(data, discord_size, sax_word_length, alpha,  1).pop()
     }
 
     /// An internal function that performs the hot sax discord discovery algorithm.

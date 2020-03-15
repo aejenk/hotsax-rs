@@ -24,3 +24,14 @@ pub fn znorm<R, F>(data: &R) -> Vec<F> where R: AsRef<[F]>, F: Float {
     let std_dev = std_dev(data);
     data.as_ref().iter().map(|e| (*e-mean) / std_dev).collect()
 }
+
+/// Calculates the gaussian distance between two lists of floats.
+pub fn gaussian<N>(q: &[N], c: &[N]) -> N where N: Float {
+    let sum = q
+        .iter()
+        .zip(c)
+        .map(|(qi, ci)| (*qi - *ci).powi(2))
+        .fold(N::zero(), |acc, x| acc + x);
+
+    sum.sqrt()
+}

@@ -1,25 +1,24 @@
-//! A currently heavily unstable crate containing algorithms relating to data analysis
-//! for anomaly detection. The API will experience numerous breaking changes for the time being until
-//! the API is finalized (v1.0)
+//! This crate contains an implementation of the HOT SAX algorithm, and
+//! the brute force algorithm, as proposed by [Keogh et al.](http://www.cse.cuhk.edu.hk/~adafu/Pub/icdm05time.pdf).
+//!
+//! During the implementation some other functions had to be made, such as `paa`, `znorm`, and
+//! `gaussian`. These functions are exposed, due to their utility apart from being used in HOT SAX.
 
 /// Implements anomaly detection algorithms, including the brute force and
 /// HOT SAX algorithms as specified by Keogh's paper, found
 /// [here](http://www.cse.cuhk.edu.hk/~adafu/Pub/icdm05time.pdf).
 pub mod anomaly;
-
-/// Distance algorithms between two lists of floats.
-///
-/// Currently only contains support for `gaussian`.
-pub mod dist;
+pub use anomaly::Keogh;
 
 /// Dimensionality reduction techniques.
 ///
-/// Currently only includes piecewise approximation (paa) and
-/// symbolic aggregate approximation (sax)
+/// Used in the implementation of `HOTSAX`, but can be used externally as well.
 pub mod dim_reduction;
+pub use dim_reduction::{paa, sax};
 
 /// Miscellaneous utility functions.
 pub mod util;
+pub use util::{gaussian, znorm, mean, std_dev};
 
 pub(crate) mod trie;
 
@@ -27,7 +26,6 @@ pub(crate) mod trie;
 mod test {
     use std::error::Error;
     use plotly::{Plot, Scatter};
-    use crate::util::znorm;
 
     type Entry = f64;
 
@@ -53,7 +51,7 @@ mod test {
         // It uses the same settings: a discord size of 128 and a=3.
         // word_size was assumed to be 3.
         let discord_size = 128;
-        let discord = crate::anomaly::KeoghBuilder::with(&data, discord_size)
+        let discord = crate::Keogh::with(&data, discord_size)
             .find_largest_discord()
             .unwrap().1;
 
@@ -63,7 +61,7 @@ mod test {
             .name("Data");
 
         // Plot the discord itself as a red color.
-        let trace2 = Scatter::new((discord+1..discord+discord_size).collect(), data[discord..discord+128].to_vec())
+        let trace2 = Scatter::new((discord+1..discord+discord_size+1).collect(), data[discord..discord+128].to_vec())
             .line(plotly::common::Line::new().color(plotly::NamedColor::Red))
             .name("Discord");
 
