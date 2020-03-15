@@ -6,7 +6,7 @@ pub fn gaussian<N>(q: &[N], c: &[N]) -> N where N: Float {
         .iter()
         .zip(c)
         .map(|(qi, ci)| (*qi - *ci).powi(2))
-        .fold(N::from(0.0).unwrap(), |acc, x| acc + x);
+        .fold(N::zero(), |acc, x| acc + x);
 
     sum.sqrt()
 }

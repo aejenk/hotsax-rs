@@ -2,11 +2,61 @@ use num::Float;
 use super::dist::gaussian;
 use std::ops::AddAssign;
 use super::trie::AugmentedTrie;
-use std::collections::HashMap;
-use std::process::exit;
+use std::collections::{HashMap, HashSet};
 use crate::util::znorm;
 use rand::seq::SliceRandom;
-use crate::dim_reduction::sax;
+
+/// Helps with using the HOT SAX algorithm, by assuming certain defaults.
+///
+/// Namely:
+/// - sax_word_length = 3
+/// - alpha = 3
+pub struct KeoghBuilder<'a, N: Float> {
+    data: &'a Vec<N>,
+    discord_size: usize,
+    sax_word_length: usize,
+    alpha: usize,
+}
+
+impl<'a, N: Float> KeoghBuilder<'a, N> {
+    pub fn with(data: &'a Vec<N>, discord_size: usize) -> Self {
+        Self {
+            data,
+            discord_size,
+            sax_word_length: 3,
+            alpha: 3,
+        }
+    }
+
+    pub fn sax_word_length(&mut self, n: usize) -> &mut Self {
+        self.sax_word_length = n;
+        self
+    }
+
+    pub fn alpha(&mut self, n: usize) -> &mut Self {
+        self.alpha = n;
+        self
+    }
+
+    pub fn find_largest_discord(&self) -> Option<(f64, usize)> {
+        Keogh::get_top_discord(
+            self.data,
+            self.discord_size,
+            self.sax_word_length,
+            self.alpha
+        )
+    }
+
+    pub fn find_n_largest_discords(&self, discord_amnt: usize) -> Vec<(f64, usize)> {
+        Keogh::get_top_n_discords(
+            self.data,
+            self.discord_size,
+            self.sax_word_length,
+            self.alpha,
+            discord_amnt
+        )
+    }
+}
 
 pub struct Keogh {}
 
@@ -53,19 +103,24 @@ impl Keogh {
         }).collect()
     }
 
-    /// The HOT SAX algorithm as proposed by Keogh et al. As suggested by the paper, the alphabet
-    /// size used is hardcoded as `3`.
+    /// The HOT SAX algorithm as proposed by Keogh et al.
     ///
     /// Accurate, and faster than the brute force algorithm. Takes between `n` and `n^2` time.
     ///
     /// ## Panics
-    /// `sax_word_length` is larger than `discord size`.
+    /// - `sax_word_length` is larger than `discord size`.
+    /// - `alpha` is under 3 or over 7.
     ///
     /// ## Returns
     /// A list of the distances of the top n discords (0), as well as their locations. (1)
     /// This list can have less elements if less discords were found.
-    pub fn get_top_n_discords<N>(data: &Vec<N>, discord_size: usize, sax_word_length: usize, discord_amnt: usize) -> Vec<(f64, usize)> where N: Float {
-        let alpha = 3;
+    pub fn get_top_n_discords<N>(
+        data: &Vec<N>,
+        discord_size: usize,
+        sax_word_length: usize,
+        alpha: usize,
+        discord_amnt: usize
+    ) -> Vec<(f64, usize)> where N: Float {
         let len = data.len();
         let mut words: Vec<String> = Vec::new();
 
@@ -80,30 +135,37 @@ impl Keogh {
         // Contains (index, (SAXword, frequency))
         // The former is useful to iterate over the data in an ordered way.
         // The latter is useful for the magic inner loop.
+        // `word_table`
         let word_table = Keogh::attach_freq_sax_words(&words)
             .into_iter()
             .enumerate()
             .collect::<Vec<(usize, (&String, usize))>>();
 
-        let mut sorted_word_table = word_table.clone();
+        // Gets the minimum frequency from the word table
+        let min_freq = (word_table.iter().min_by_key(|elem| (elem.1).1).unwrap().1).1;
 
-        // Not exactly like HOT SAX, because it's a full sort.
-        // TODO: try implementing the true algorithm
-        sorted_word_table.sort_by_key(|elem| (elem.1).1);
+        // Splits word table into minfreq and the rest.
+        let (mut word_table, mut other) : (_,Vec<_>)  = word_table
+            .into_iter()
+            .partition(|elem| (elem.1).1 == min_freq);
+
+        // Randomly shuffles the rest, then adds them to the word table.
+        other.shuffle(&mut rand::thread_rng());
+        word_table.extend(other);
 
         let mut discords : Vec<(f64, usize)> = Vec::new();
         let mut skip_over = Vec::new();
 
         loop {
             let discord = Keogh::hot_sax_internal(
-                &sorted_word_table,
+                &word_table,
                 &trie,
                 discord_size,
-                &data,
+                &znorm,
                 skip_over.as_slice()
             );
 
-            if (discord.1 == std::usize::MAX) | (discord.0 == 0.0) {
+            if discord.0 == 0.0 {
                 break discords
             }
 
@@ -132,14 +194,19 @@ impl Keogh {
     /// The distance of the best discord (0), as well as its location. (1)
     ///
     /// If such a discord isn't found, this function returns `None`.
-    pub fn get_top_discord<N>(data: &Vec<N>, discord_size: usize, sax_word_length: usize) -> Option<(f64, usize)> where N: Float {
-        Keogh::get_top_n_discords(data, discord_size, sax_word_length, 1).pop()
+    pub fn get_top_discord<N>(
+        data: &Vec<N>,
+        discord_size: usize,
+        sax_word_length: usize,
+        alpha: usize
+    ) -> Option<(f64, usize)> where N: Float {
+        Keogh::get_top_n_discords(data, discord_size, sax_word_length, alpha,  1).pop()
     }
 
     /// An internal function that performs the hot sax discord discovery algorithm.
     ///
     /// ## Parameters
-    /// - `sorted_word_table` : A word table that's sorted by its frequency in ascending order.
+    /// - `sorted_word_table` : A word table that's sorted according to the HOT SAX algorithm.
     /// - `word_trie` : An `AugmentedTrie` that represents the sorted word table.
     /// - `alpha` : The alphabet size.
     /// - `discord_size` : The size of the discords to be found.
@@ -154,15 +221,16 @@ impl Keogh {
     ) -> (f64, usize) where N: Float {
         // The actual discord discovery.
         let mut best_dist = 0.0;
-        let mut best_loc = std::usize::MAX;
+        let mut best_loc = 0;
 
+        // Outer loop heuristic: Uses sorted word table.
         for (i,(word,_)) in sorted_word_table.into_iter() {
             if skip_over.contains(i) {
                 continue
             }
 
-            // Other occurrences of the same SAX word
-            let occurrences = word_trie.get_indexes(word).clone();
+            // Other occurrences of the same SAX word using the word trie.
+            let occurrences: HashSet<usize> = word_trie.get_indexes(word).clone().into_iter().collect();
 
             // Boolean that checks whether to perform the random search
             let mut do_random_search = true;
@@ -170,38 +238,38 @@ impl Keogh {
             // The neighbouring distance for the inner loop
             let mut neigh_dist = std::f64::INFINITY;
 
+            // Inner loop heuristic: Checks the occurrences of the same SAX word using the word trie.
             for j in occurrences.into_iter() {
                 if (*i as isize - j as isize).abs() >= discord_size as isize {
                     // Retrieves the gaussian distance between to slices
                     let dist = gaussian(&data[*i..*i+ discord_size -1], &data[j..j+ discord_size -1]).to_f64().unwrap();
-                    // Updates the neighburing distance
-                    if dist < neigh_dist { neigh_dist = dist };
+                    // Updates the neighbouring distance
+                    neigh_dist = neigh_dist.min(dist);
                     // Stops searching if a distance word than `best_dist` was found
                     if dist < best_dist { do_random_search = false; break;}
                 }
             }
 
-            if do_random_search {
-                // Gets all indexes and shuffles them
-                let mut nums: Vec<usize> = (0..data.len()- discord_size +1).collect();
-                nums.shuffle(&mut rand::thread_rng());
+            if !do_random_search { continue }
 
-                // Calculates the closest neighbouring distance
-                for j in nums.into_iter() {
-                    if (*i as isize - j as isize).abs() >= discord_size as isize {
-                        let dist = gaussian(&data[*i..*i + discord_size - 1], &data[j..j + discord_size - 1]).to_f64().unwrap();
-                        if dist < best_dist {
-                            break;
-                        }
-                        neigh_dist = neigh_dist.min(dist);
-                    }
-                }
+            // Gets all indexes and shuffles them
+            // This includes the occurrences as
+            let mut nums: Vec<usize> = (0..data.len()- discord_size +1).collect();
+            nums.shuffle(&mut rand::thread_rng());
 
-                // Updates the best distance if the neighbouring distance is larger.
-                if (neigh_dist > best_dist) & (neigh_dist < std::f64::INFINITY) {
-                    best_dist = neigh_dist;
-                    best_loc = *i;
+            // Calculates the closest neighbouring distance
+            for j in nums.into_iter() {
+                if (*i as isize - j as isize).abs() >= discord_size as isize {
+                    let dist = gaussian(&data[*i..*i + discord_size - 1], &data[j..j + discord_size - 1]).to_f64().unwrap();
+                    neigh_dist = neigh_dist.min(dist);
+                    if dist < best_dist { break; }
                 }
+            }
+
+            // Updates the best distance if the neighbouring distance is larger.
+            if (neigh_dist > best_dist) & (neigh_dist < std::f64::INFINITY) {
+                best_dist = neigh_dist;
+                best_loc = *i;
             }
         }
 

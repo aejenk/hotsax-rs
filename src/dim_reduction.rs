@@ -3,11 +3,11 @@ use lazy_static::lazy_static;
 
 lazy_static!(
     static ref BREAKPOINTS: [Vec<f64>; 5] = [
-        vec![-0.43, 0.43],
-        vec![-0.67, 0.0, 0.67],
-        vec![-0.84, -0.25, 0.25, 0.84],
-        vec![-0.97, -0.43, 0.0, 0.43, 0.97],
-        vec![-1.07, -0.57, -0.18, 0.18, 0.57, 1.07]
+        vec![-0.43, 0.43], // 3
+        vec![-0.67, 0.0, 0.67], // 4
+        vec![-0.84, -0.25, 0.25, 0.84], // 5
+        vec![-0.97, -0.43, 0.0, 0.43, 0.97], // 6
+        vec![-1.07, -0.57, -0.18, 0.18, 0.57, 1.07] // 7
     ];
 );
 
@@ -20,11 +20,11 @@ pub fn paa<N>(data: &Vec<N>, dim: usize) -> Vec<N> where N: Float {
         panic!("len <= dim: Output size is larger than the vector itself.");
     }
 
-    let mut newvec : Vec<N> = Vec::with_capacity(dim);
+    let mut newvec : Vec<N> = Vec::new();
 
     for i in 0..dim {
-        let j = (len/dim) * (i) + 1;
-        let end = (len/dim) * (i+1);
+        let j = ((len as f64/dim as f64) * (i as f64) + 1.0) as usize;
+        let end = ((len as f64/dim as f64) * (i as f64+1.0)) as usize;
 
         let sum= data[j..end]
             .iter()
