@@ -47,7 +47,7 @@ impl<'a, N: Float> Keogh<'a, N> {
     /// Sets the alphabet size to be used. The only valid values should be in the range 3..=7.
     ///
     /// ## Panics
-    /// When `n` is set to an invalid value.
+    /// - When `n` is set to an invalid value.
     pub fn alpha(&mut self, n: usize) -> &mut Self {
         if (n<3) | (n>7) {
             panic!("Invalid setting for alphabet size ({}). Only values in 3-7 are supported.", n);

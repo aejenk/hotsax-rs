@@ -13,6 +13,9 @@ lazy_static!(
 
 /// Returns a piecewise approximation of the original list of values.
 /// The size of the output array will be the same as `dim`.
+///
+/// ## Panics
+/// - If `data.len() <= dim`
 pub fn paa<N>(data: &Vec<N>, dim: usize) -> Vec<N> where N: Float {
     let len = data.len();
 
@@ -54,14 +57,29 @@ fn to_sax_letter<N>(elem: &N, alpha: usize) -> char where N: Float {
 ///
 /// `word_size` determines the length of the word, and `alpha` represents the alphabet size.
 ///
+/// If `word_size` is the same as `data`'s length, then the `paa` step is skipped.
+/// Keep in mind that if you want to avoid using the piecewise approximation, you can do this:
+///
+/// ```ignore
+/// sax(&data, data.len(), alpha);
+/// ```
+///
 /// # Panics
 /// - if `alpha` is not between 3 and 7. Higher numbers can only be supported if the static
 /// variable `BREAKPOINTS` is updated.
+/// - if `word_size` is larger than `data.len()`
 pub fn sax<N>(data: &Vec<N>, word_size: usize, alpha: usize) -> String where N: Float {
-    let norm = super::util::znorm(data);
-    let paa = paa(&norm, word_size);
+    if data.len() < word_size {
+        panic!("word_size ({}) can't be larger than data.len() ({})", word_size, data.len());
+    }
 
-    let string: String = paa
+    let norm = super::util::znorm(data);
+
+    let temp = if data.len() != word_size {
+        paa(&norm, word_size)
+    } else { norm };
+
+    let string: String = temp
         .iter()
         .map(|e| to_sax_letter(e, alpha))
         .collect();

@@ -6,6 +6,7 @@ authors = ["Andrea Jenkins <mctech26@gmail.com>"]
 license = "MPL-2.0"
 keywords = ["analysis", "data", "anomalies", "ai"]
 edition = "2018"
+readme = "README.md"
 categories = ["algorithms"]
 maintenance = { status = "actively-developed" }
 
