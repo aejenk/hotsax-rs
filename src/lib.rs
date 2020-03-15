@@ -2,9 +2,10 @@
 //! for anomaly detection. The API will experience numerous breaking changes for the time being until
 //! the API is finalized (v1.0)
 
-/// Implements the brute force and HOT SAX algorithms as specified by Keogh's paper, found
+/// Implements anomaly detection algorithms, including the brute force and
+/// HOT SAX algorithms as specified by Keogh's paper, found
 /// [here](http://www.cse.cuhk.edu.hk/~adafu/Pub/icdm05time.pdf).
-pub mod keogh;
+pub mod anomaly;
 
 /// Distance algorithms between two lists of floats.
 ///
@@ -26,13 +27,15 @@ pub(crate) mod trie;
 mod test {
     #[test]
     fn test() {
-        use crate::keogh::{brute_force, hot_sax};
+        use crate::anomaly::Keogh;
         let mut data: Vec<f64> = (1..1000).into_iter().map(|num| num as f64).collect();
 
         data[180] = 500.0;
+        data[300] = 800.0;
+        data[500] = 10000.0;
+
         let windowsize= 20;
 
-        dbg!(brute_force(&data, windowsize));
-        dbg!(hot_sax(&data, windowsize, 10));
+        dbg!(Keogh::get_top_n_discords(&data, windowsize, 10, 3));
     }
 }
