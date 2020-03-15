@@ -25,17 +25,55 @@ pub(crate) mod trie;
 
 #[cfg(test)]
 mod test {
+    use std::error::Error;
+    use plotly::{Plot, Scatter};
+    use crate::util::znorm;
+
+    type Entry = f64;
+
     #[test]
-    fn test() {
-        use crate::anomaly::Keogh;
-        let mut data: Vec<f64> = (1..1000).into_iter().map(|num| num as f64).collect();
+    // Tests out the HOT SAX algorithm by running it on the same dataset as in the paper.
+    fn keogh() -> Result<(), Box<dyn Error>> {
+        // Parses the CSV file from the dataset.
+        let mut rdr = csv::ReaderBuilder::new()
+            .trim(csv::Trim::All)
+            .from_path("data/TEK16.CSV")?;
 
-        data[180] = 500.0;
-        data[300] = 800.0;
-        data[500] = 10000.0;
+        // Deserialize CSV data into a vector of floats.
+        let mut data : Vec<f64> = Vec::new();
+        for result in rdr.deserialize() {
+            let record: Entry = result?;
+            data.push(record);
+        }
 
-        let windowsize= 20;
+        // Prepare a plot
+        let mut plot = Plot::new();
 
-        dbg!(Keogh::get_top_n_discords(&data, windowsize, 10, 3));
+        // Retrieve the largest discord. This should approx. match the one found in the paper.
+        // It uses the same settings: a discord size of 128 and a=3.
+        // word_size was assumed to be 3.
+        let discord_size = 128;
+        let discord = crate::anomaly::KeoghBuilder::with(&data, discord_size)
+            .find_largest_discord()
+            .unwrap().1;
+
+        // Plot the entire dataset as a blue color.
+        let trace1 = Scatter::new((1..=data.len()).collect(), data.clone())
+            .line(plotly::common::Line::new().color(plotly::NamedColor::Blue))
+            .name("Data");
+
+        // Plot the discord itself as a red color.
+        let trace2 = Scatter::new((discord+1..discord+discord_size).collect(), data[discord..discord+128].to_vec())
+            .line(plotly::common::Line::new().color(plotly::NamedColor::Red))
+            .name("Discord");
+
+        // Add traces to the plot.
+        plot.add_trace(trace1);
+        plot.add_trace(trace2);
+
+        // Shows the plot to verify.
+        plot.show();
+
+        Ok(())
     }
 }
