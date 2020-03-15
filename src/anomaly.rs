@@ -14,8 +14,7 @@ impl Keogh {
     /// Brute force algorithm for finding discords. Made private due to substandard performance.
     ///
     /// Incredibly accurate, but slow to execute. Always takes n^2 time.
-    #[allow(dead_code)]
-    fn brute_force<N>(data: &Vec<N>, n: usize) -> (f64, usize) where N: Float {
+    pub fn brute_force<N>(data: &Vec<N>, n: usize) -> (f64, usize) where N: Float {
         let mut best_dist = 0.0;
         let mut best_loc = 0;
 
@@ -99,9 +98,8 @@ impl Keogh {
             let discord = Keogh::hot_sax_internal(
                 &sorted_word_table,
                 &trie,
-                alpha,
                 discord_size,
-                &znorm,
+                &data,
                 skip_over.as_slice()
             );
 
@@ -145,14 +143,13 @@ impl Keogh {
     /// - `word_trie` : An `AugmentedTrie` that represents the sorted word table.
     /// - `alpha` : The alphabet size.
     /// - `discord_size` : The size of the discords to be found.
-    /// - `znorm_data` : The data, already z-normalised.
+    /// - `znorm_data` : The data.
     /// - `skip_over` : A list of indexes to skip over.
     fn hot_sax_internal<N>(
         sorted_word_table: &Vec<(usize, (&String, usize))>,
         word_trie: &AugmentedTrie,
-        alpha: usize,
         discord_size: usize,
-        znorm_data: &Vec<N>,
+        data: &Vec<N>,
         skip_over: &[usize]
     ) -> (f64, usize) where N: Float {
         // The actual discord discovery.
@@ -176,7 +173,7 @@ impl Keogh {
             for j in occurrences.into_iter() {
                 if (*i as isize - j as isize).abs() >= discord_size as isize {
                     // Retrieves the gaussian distance between to slices
-                    let dist = gaussian(&znorm_data[*i..*i+ discord_size -1], &znorm_data[j..j+ discord_size -1]).to_f64().unwrap();
+                    let dist = gaussian(&data[*i..*i+ discord_size -1], &data[j..j+ discord_size -1]).to_f64().unwrap();
                     // Updates the neighburing distance
                     if dist < neigh_dist { neigh_dist = dist };
                     // Stops searching if a distance word than `best_dist` was found
@@ -186,13 +183,13 @@ impl Keogh {
 
             if do_random_search {
                 // Gets all indexes and shuffles them
-                let mut nums: Vec<usize> = (0..znorm_data.len()- discord_size +1).collect();
+                let mut nums: Vec<usize> = (0..data.len()- discord_size +1).collect();
                 nums.shuffle(&mut rand::thread_rng());
 
                 // Calculates the closest neighbouring distance
                 for j in nums.into_iter() {
                     if (*i as isize - j as isize).abs() >= discord_size as isize {
-                        let dist = gaussian(&znorm_data[*i..*i + discord_size - 1], &znorm_data[j..j + discord_size - 1]).to_f64().unwrap();
+                        let dist = gaussian(&data[*i..*i + discord_size - 1], &data[j..j + discord_size - 1]).to_f64().unwrap();
                         if dist < best_dist {
                             break;
                         }
