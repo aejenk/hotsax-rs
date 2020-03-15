@@ -1,6 +1,6 @@
 [package]
-name = "dt_analysis"
-description = "A crate meant to assist with data analysis."
+name = "hotsax"
+description = "An implementation of the HOTSAX discord discovery algorithm."
 version = "0.1.0"
 authors = ["Andrea Jenkins <mctech26@gmail.com>"]
 license = "MPL-2.0"
